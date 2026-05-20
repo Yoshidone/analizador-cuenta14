@@ -108,7 +108,7 @@ def detectar_regularizacion(df):
                 df.at[i, "Estado"] = "Regularizado"
 
                 df.at[i, "Relacionado"] = (
-                    f"➡ Crédito relacionado: "
+                    f"➡ Crédito: "
                     f"{credito_row['Crédito']} | "
                     f"{credito_row.get('Concepto', '')}"
                 )
@@ -379,7 +379,7 @@ if archivo:
     )
 
     # =====================================
-    # DUPLICADOS
+    # POSIBLES DUPLICADOS
     # =====================================
 
     st.subheader("🚨 Posibles Duplicados")
@@ -388,15 +388,91 @@ if archivo:
         df_filtrado["Duplicado"]
     ]
 
-    st.dataframe(
-        dup_df.style.format({
-            "Débito": "{:,.2f}",
-            "Crédito": "{:,.2f}",
-            "Saldo": "{:,.2f}",
-            "T/C": "{:,.3f}"
-        }),
-        use_container_width=True
-    )
+    if not dup_df.empty:
+
+        st.dataframe(
+            dup_df.style.format({
+                "Débito": "{:,.2f}",
+                "Crédito": "{:,.2f}",
+                "Saldo": "{:,.2f}",
+                "T/C": "{:,.3f}"
+            }),
+            use_container_width=True
+        )
+
+    else:
+
+        st.success(
+            "✅ No se encontraron duplicados"
+        )
+
+    # =====================================
+    # COINCIDENCIAS
+    # =====================================
+
+    st.subheader("🔵 Coincidencias Débito vs Crédito")
+
+    coincidencias = []
+
+    debitos = df_filtrado[
+        df_filtrado["Débito"] > 0
+    ]
+
+    creditos = df_filtrado[
+        df_filtrado["Crédito"] > 0
+    ]
+
+    for _, deb in debitos.iterrows():
+
+        monto_debito = deb["Débito"]
+
+        posibles = creditos[
+            creditos["Crédito"] == monto_debito
+        ]
+
+        if not posibles.empty:
+
+            for _, cred in posibles.iterrows():
+
+                coincidencias.append({
+
+                    "Cuenta Débito": deb.get("Cuenta"),
+
+                    "Fecha Débito": deb.get("Fecha"),
+
+                    "Débito": deb.get("Débito"),
+
+                    "Concepto Débito": deb.get("Concepto"),
+
+                    "Cuenta Crédito": cred.get("Cuenta"),
+
+                    "Fecha Crédito": cred.get("Fecha"),
+
+                    "Crédito": cred.get("Crédito"),
+
+                    "Concepto Crédito": cred.get("Concepto"),
+
+                    "Estado": "✅ Regularizado"
+
+                })
+
+    coincidencias_df = pd.DataFrame(coincidencias)
+
+    if not coincidencias_df.empty:
+
+        st.dataframe(
+            coincidencias_df.style.format({
+                "Débito": "{:,.2f}",
+                "Crédito": "{:,.2f}"
+            }),
+            use_container_width=True
+        )
+
+    else:
+
+        st.success(
+            "✅ No se encontraron coincidencias"
+        )
 
     # =====================================
     # EXPORTAR
@@ -419,6 +495,12 @@ if archivo:
             writer,
             index=False,
             sheet_name="Duplicados"
+        )
+
+        coincidencias_df.to_excel(
+            writer,
+            index=False,
+            sheet_name="Coincidencias"
         )
 
     output.seek(0)
