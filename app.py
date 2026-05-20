@@ -17,7 +17,6 @@ st.title("📊 Analizador Inteligente - Cuenta 14")
 st.markdown("""
 Sistema automático para:
 
-- Entregas a rendir
 - Regularizaciones
 - Duplicados
 - Pendientes
@@ -82,7 +81,8 @@ def convertir_numeros(df):
 
 
 # =====================================
-# REGULARIZACION
+# REGULARIZACION REAL
+# SIN REPETIR CREDITOS
 # =====================================
 
 def detectar_regularizacion(df):
@@ -92,6 +92,8 @@ def detectar_regularizacion(df):
     df["Relacionado"] = ""
 
     df["Espejo"] = False
+
+    creditos_usados = []
 
     debitos = df[
         df["Débito"] > 0
@@ -106,42 +108,52 @@ def detectar_regularizacion(df):
         monto_debito = deb["Débito"]
 
         posibles = creditos[
-            creditos["Crédito"] == monto_debito
+            (creditos["Crédito"] == monto_debito)
+            &
+            (~creditos.index.isin(creditos_usados))
         ]
 
         if not posibles.empty:
 
-            for idx, cred in posibles.iterrows():
+            cred = posibles.iloc[0]
 
-                # =================================
-                # MARCAR DEBITO
-                # =================================
+            idx = cred.name
 
-                df.at[i, "Estado"] = "Regularizado"
+            # =================================
+            # MARCAR DEBITO
+            # =================================
 
-                df.at[i, "Espejo"] = True
+            df.at[i, "Estado"] = "Regularizado"
 
-                df.at[i, "Relacionado"] = (
-                    f"↔ Crédito {cred['Crédito']}"
-                )
+            df.at[i, "Espejo"] = True
 
-                # =================================
-                # MARCAR CREDITO
-                # =================================
+            df.at[i, "Relacionado"] = (
+                f"↔ Crédito {cred['Crédito']}"
+            )
 
-                df.at[idx, "Estado"] = "Regularizado"
+            # =================================
+            # MARCAR CREDITO
+            # =================================
 
-                df.at[idx, "Espejo"] = True
+            df.at[idx, "Estado"] = "Regularizado"
 
-                df.at[idx, "Relacionado"] = (
-                    f"↔ Débito {deb['Débito']}"
-                )
+            df.at[idx, "Espejo"] = True
+
+            df.at[idx, "Relacionado"] = (
+                f"↔ Débito {deb['Débito']}"
+            )
+
+            # =================================
+            # BLOQUEAR CREDITO
+            # =================================
+
+            creditos_usados.append(idx)
 
     return df
 
 
 # =====================================
-# DUPLICADOS
+# DUPLICADOS EXACTOS
 # =====================================
 
 def detectar_duplicados(df):
@@ -380,32 +392,6 @@ if archivo:
     )
 
     # =====================================
-    # DASHBOARD
-    # =====================================
-
-    st.subheader("📈 Dashboard")
-
-    resumen = (
-        df_filtrado
-        .groupby("Riesgo")[["Débito", "Crédito"]]
-        .sum()
-        .reset_index()
-    )
-
-    fig = px.bar(
-        resumen,
-        x="Riesgo",
-        y=["Débito", "Crédito"],
-        barmode="group",
-        title="Análisis de Riesgo"
-    )
-
-    st.plotly_chart(
-        fig,
-        use_container_width=True
-    )
-
-    # =====================================
     # DUPLICADOS
     # =====================================
 
@@ -478,7 +464,7 @@ if archivo:
 
         dup_df.to_excel(
             writer,
-            index=False,
+           index=False,
             sheet_name="Duplicados"
         )
 
