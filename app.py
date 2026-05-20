@@ -82,12 +82,14 @@ def convertir_numeros(df):
 
 
 # =====================================
-# REGULARIZACION
+# DETECTAR REGULARIZACION
 # =====================================
 
 def detectar_regularizacion(df):
 
     df["Estado"] = "Pendiente"
+
+    df["Relacionado"] = ""
 
     for i, row in df.iterrows():
 
@@ -101,13 +103,21 @@ def detectar_regularizacion(df):
 
             if not posibles.empty:
 
+                credito_row = posibles.iloc[0]
+
                 df.at[i, "Estado"] = "Regularizado"
+
+                df.at[i, "Relacionado"] = (
+                    f"➡ Crédito relacionado: "
+                    f"{credito_row['Crédito']} | "
+                    f"{credito_row.get('Concepto', '')}"
+                )
 
     return df
 
 
 # =====================================
-# DUPLICADOS
+# DETECTAR DUPLICADOS
 # =====================================
 
 def detectar_duplicados(df):
@@ -167,7 +177,7 @@ def colorear_filas(row):
 
 
 # =====================================
-# CARGA ARCHIVO
+# CARGAR ARCHIVO
 # =====================================
 
 archivo = st.file_uploader(
@@ -307,8 +317,29 @@ if archivo:
 
     st.subheader("📄 Análisis Inteligente")
 
+    columnas_mostrar = [
+
+        "Cuenta",
+        "Descripción",
+        "Débito",
+        "Crédito",
+        "Saldo",
+        "T/C",
+        "Fecha",
+        "Concepto",
+        "Estado",
+        "Relacionado",
+        "Duplicado",
+        "Riesgo"
+    ]
+
+    columnas_existentes = [
+        c for c in columnas_mostrar
+        if c in df_filtrado.columns
+    ]
+
     st.dataframe(
-        df_filtrado
+        df_filtrado[columnas_existentes]
         .style
         .format({
             "Débito": "{:,.2f}",
@@ -348,61 +379,14 @@ if archivo:
     )
 
     # =====================================
-    # DUPLICADOS Y COINCIDENCIAS
+    # DUPLICADOS
     # =====================================
 
-    st.subheader("🚨 Posibles Duplicados y Coincidencias")
+    st.subheader("🚨 Posibles Duplicados")
 
-    # DUPLICADOS EXACTOS
     dup_df = df_filtrado[
         df_filtrado["Duplicado"]
-    ].copy()
-
-    # COINCIDENCIAS
-    coincidencias = []
-
-    debitos = df_filtrado[
-        df_filtrado["Débito"] > 0
     ]
-
-    creditos = df_filtrado[
-        df_filtrado["Crédito"] > 0
-    ]
-
-    for _, deb in debitos.iterrows():
-
-        monto_debito = deb["Débito"]
-
-        posibles = creditos[
-            creditos["Crédito"] == monto_debito
-        ]
-
-        if not posibles.empty:
-
-            for _, cred in posibles.iterrows():
-
-                coincidencias.append({
-
-                    "Monto Coincide": monto_debito,
-
-                    "Fecha Débito": deb.get("Fecha"),
-
-                    "Fecha Crédito": cred.get("Fecha"),
-
-                    "Concepto Débito": deb.get("Concepto"),
-
-                    "Concepto Crédito": cred.get("Concepto"),
-
-                    "Estado": "Posible Regularización"
-                })
-
-    coincidencias_df = pd.DataFrame(coincidencias)
-
-    # =====================================
-    # MOSTRAR DUPLICADOS
-    # =====================================
-
-    st.markdown("### 🔴 Duplicados Exactos")
 
     st.dataframe(
         dup_df.style.format({
@@ -413,27 +397,6 @@ if archivo:
         }),
         use_container_width=True
     )
-
-    # =====================================
-    # MOSTRAR COINCIDENCIAS
-    # =====================================
-
-    st.markdown("### 🔵 Coincidencias Débito vs Crédito")
-
-    if not coincidencias_df.empty:
-
-        st.dataframe(
-            coincidencias_df.style.format({
-                "Monto Coincide": "{:,.2f}"
-            }),
-            use_container_width=True
-        )
-
-    else:
-
-        st.success(
-            "✅ No se encontraron coincidencias"
-        )
 
     # =====================================
     # EXPORTAR
@@ -456,12 +419,6 @@ if archivo:
             writer,
             index=False,
             sheet_name="Duplicados"
-        )
-
-        coincidencias_df.to_excel(
-            writer,
-            index=False,
-            sheet_name="Coincidencias"
         )
 
     output.seek(0)
