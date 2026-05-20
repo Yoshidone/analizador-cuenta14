@@ -89,8 +89,6 @@ def detectar_regularizacion(df):
 
     df["Estado"] = "Pendiente"
 
-    df["Relacionado"] = ""
-
     df["Espejo"] = False
 
     creditos_usados = []
@@ -127,10 +125,6 @@ def detectar_regularizacion(df):
 
             df.at[i, "Espejo"] = True
 
-            df.at[i, "Relacionado"] = (
-                f"↔ Crédito {cred['Crédito']}"
-            )
-
             # =================================
             # MARCAR CREDITO
             # =================================
@@ -138,10 +132,6 @@ def detectar_regularizacion(df):
             df.at[idx, "Estado"] = "Regularizado"
 
             df.at[idx, "Espejo"] = True
-
-            df.at[idx, "Relacionado"] = (
-                f"↔ Débito {deb['Débito']}"
-            )
 
             # =================================
             # BLOQUEAR CREDITO
@@ -289,6 +279,59 @@ if archivo:
             )
 
     # =====================================
+    # ORDENAR REGULARIZADOS JUNTOS
+    # =====================================
+
+    df["Grupo"] = ""
+
+    contador = 1
+
+    debitos = df[
+        df["Débito"] > 0
+    ]
+
+    creditos = df[
+        df["Crédito"] > 0
+    ]
+
+    creditos_usados = []
+
+    for i, deb in debitos.iterrows():
+
+        monto = deb["Débito"]
+
+        posibles = creditos[
+            (creditos["Crédito"] == monto)
+            &
+            (~creditos.index.isin(creditos_usados))
+        ]
+
+        if not posibles.empty:
+
+            cred = posibles.iloc[0]
+
+            idx = cred.name
+
+            grupo = f"GRUPO {contador}"
+
+            df.at[i, "Grupo"] = grupo
+
+            df.at[idx, "Grupo"] = grupo
+
+            creditos_usados.append(idx)
+
+            contador += 1
+
+    # =====================================
+    # ORDEN FINAL
+    # =====================================
+
+    df = df.sort_values(
+        by=["Grupo", "Fecha"],
+        ascending=True
+    )
+
+    # =====================================
     # KPIS
     # =====================================
 
@@ -366,7 +409,6 @@ if archivo:
         "Fecha",
         "Concepto",
         "Estado",
-        "Relacionado",
         "Duplicado",
         "Espejo",
         "Riesgo"
@@ -389,6 +431,32 @@ if archivo:
         .apply(colorear_filas, axis=1),
         use_container_width=True,
         height=700
+    )
+
+    # =====================================
+    # DASHBOARD
+    # =====================================
+
+    st.subheader("📈 Dashboard")
+
+    resumen = (
+        df_filtrado
+        .groupby("Riesgo")[["Débito", "Crédito"]]
+        .sum()
+        .reset_index()
+    )
+
+    fig = px.bar(
+        resumen,
+        x="Riesgo",
+        y=["Débito", "Crédito"],
+        barmode="group",
+        title="Análisis de Riesgo"
+    )
+
+    st.plotly_chart(
+        fig,
+        use_container_width=True
     )
 
     # =====================================
@@ -464,7 +532,7 @@ if archivo:
 
         dup_df.to_excel(
             writer,
-           index=False,
+            index=False,
             sheet_name="Duplicados"
         )
 
