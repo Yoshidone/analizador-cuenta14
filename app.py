@@ -104,10 +104,6 @@ def detectar_regularizacion(df):
 
         monto_debito = deb["Débito"]
 
-        # =================================
-        # VALIDAR NOMBRE
-        # =================================
-
         texto_debito = str(
             deb.get("Concepto", "")
         ).upper()
@@ -159,25 +155,13 @@ def detectar_regularizacion(df):
 
             idx = cred.name
 
-            # =================================
-            # MARCAR DEBITO
-            # =================================
-
             df.at[i, "Estado"] = "Regularizado"
 
             df.at[i, "Espejo"] = True
 
-            # =================================
-            # MARCAR CREDITO
-            # =================================
-
             df.at[idx, "Estado"] = "Regularizado"
 
             df.at[idx, "Espejo"] = True
-
-            # =================================
-            # BLOQUEAR CREDITO
-            # =================================
 
             creditos_usados.append(idx)
 
@@ -235,15 +219,12 @@ def riesgo(row):
 
 def colorear_filas(row):
 
-    # REGULARIZADO
     if row["Espejo"]:
         return ["background-color: #99ccff"] * len(row)
 
-    # DUPLICADO
     if row["Duplicado"]:
         return ["background-color: #ff9999"] * len(row)
 
-    # PENDIENTE
     if row["Estado"] == "Pendiente":
         return ["background-color: #fff3b0"] * len(row)
 
@@ -492,6 +473,7 @@ if archivo:
         "Estado",
         "Duplicado",
         "Espejo",
+        "Grupo",
         "Riesgo"
     ]
 
@@ -592,6 +574,108 @@ if archivo:
 
         st.success(
             "✅ No existen movimientos pendientes"
+        )
+
+    # =====================================
+    # RELACION MANUAL
+    # =====================================
+
+    st.subheader("🛠 Relacionar Manualmente")
+
+    debitos_pendientes = df_filtrado[
+        (df_filtrado["Estado"] == "Pendiente")
+        & (df_filtrado["Débito"] > 0)
+    ]
+
+    creditos_pendientes = df_filtrado[
+        (df_filtrado["Estado"] == "Pendiente")
+        & (df_filtrado["Crédito"] > 0)
+    ]
+
+    if not debitos_pendientes.empty and not creditos_pendientes.empty:
+
+        debito_sel = st.multiselect(
+            "Seleccionar Débitos",
+            debitos_pendientes.index,
+            format_func=lambda x:
+                f"{df.loc[x,'Fecha']} | "
+                f"{df.loc[x,'Concepto']} | "
+                f"Débito: {df.loc[x,'Débito']:,.2f}"
+        )
+
+        credito_sel = st.multiselect(
+            "Seleccionar Créditos",
+            creditos_pendientes.index,
+            format_func=lambda x:
+                f"{df.loc[x,'Fecha']} | "
+                f"{df.loc[x,'Concepto']} | "
+                f"Crédito: {df.loc[x,'Crédito']:,.2f}"
+        )
+
+        total_debitos_manual = (
+            df.loc[debito_sel, "Débito"].sum()
+            if debito_sel else 0
+        )
+
+        total_creditos_manual = (
+            df.loc[credito_sel, "Crédito"].sum()
+            if credito_sel else 0
+        )
+
+        diferencia_manual = (
+            total_debitos_manual
+            - total_creditos_manual
+        )
+
+        st.info(
+            f"""
+            💸 Total Débitos: S/ {total_debitos_manual:,.2f}
+
+            💰 Total Créditos: S/ {total_creditos_manual:,.2f}
+
+            📌 Diferencia: S/ {diferencia_manual:,.2f}
+            """
+        )
+
+        if st.button("✅ Relacionar Manualmente"):
+
+            grupo_manual = (
+                f"MANUAL "
+                f"{len(df[df['Grupo'].astype(str).str.contains('MANUAL', na=False)]) + 1}"
+            )
+
+            # =====================================
+            # DEBITOS
+            # =====================================
+
+            for idx in debito_sel:
+
+                df.at[idx, "Estado"] = "Regularizado Manual"
+
+                df.at[idx, "Espejo"] = True
+
+                df.at[idx, "Grupo"] = grupo_manual
+
+            # =====================================
+            # CREDITOS
+            # =====================================
+
+            for idx in credito_sel:
+
+                df.at[idx, "Estado"] = "Regularizado Manual"
+
+                df.at[idx, "Espejo"] = True
+
+                df.at[idx, "Grupo"] = grupo_manual
+
+            st.success(
+                f"✅ Grupo manual creado: {grupo_manual}"
+            )
+
+    else:
+
+        st.info(
+            "No existen pendientes para relacionar"
         )
 
     # =====================================
