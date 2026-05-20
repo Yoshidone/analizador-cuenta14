@@ -81,6 +81,25 @@ def convertir_numeros(df):
 
 
 # =====================================
+# EXTRAER NOMBRES
+# =====================================
+
+def obtener_nombre(texto):
+
+    texto = str(texto).upper().split()
+
+    if len(texto) >= 2:
+
+        return f"{texto[0]} {texto[1]}"
+
+    elif len(texto) == 1:
+
+        return texto[0]
+
+    return ""
+
+
+# =====================================
 # REGULARIZACION REAL
 # SIN REPETIR CREDITOS
 # =====================================
@@ -105,10 +124,34 @@ def detectar_regularizacion(df):
 
         monto_debito = deb["Débito"]
 
+        nombre_debito = obtener_nombre(
+            deb.get("Concepto", "")
+        )
+
         posibles = creditos[
-            (creditos["Crédito"] == monto_debito)
+
+            (
+                creditos["Crédito"] == monto_debito
+            )
+
             &
-            (~creditos.index.isin(creditos_usados))
+
+            (
+                creditos["Concepto"]
+                .astype(str)
+                .apply(obtener_nombre)
+                ==
+                nombre_debito
+            )
+
+            &
+
+            (
+                ~creditos.index.isin(
+                    creditos_usados
+                )
+            )
+
         ]
 
         if not posibles.empty:
@@ -300,10 +343,34 @@ if archivo:
 
         monto = deb["Débito"]
 
+        nombre_debito = obtener_nombre(
+            deb.get("Concepto", "")
+        )
+
         posibles = creditos[
-            (creditos["Crédito"] == monto)
+
+            (
+                creditos["Crédito"] == monto
+            )
+
             &
-            (~creditos.index.isin(creditos_usados))
+
+            (
+                creditos["Concepto"]
+                .astype(str)
+                .apply(obtener_nombre)
+                ==
+                nombre_debito
+            )
+
+            &
+
+            (
+                ~creditos.index.isin(
+                    creditos_usados
+                )
+            )
+
         ]
 
         if not posibles.empty:
@@ -431,32 +498,6 @@ if archivo:
         .apply(colorear_filas, axis=1),
         use_container_width=True,
         height=700
-    )
-
-    # =====================================
-    # DASHBOARD
-    # =====================================
-
-    st.subheader("📈 Dashboard")
-
-    resumen = (
-        df_filtrado
-        .groupby("Riesgo")[["Débito", "Crédito"]]
-        .sum()
-        .reset_index()
-    )
-
-    fig = px.bar(
-        resumen,
-        x="Riesgo",
-        y=["Débito", "Crédito"],
-        barmode="group",
-        title="Análisis de Riesgo"
-    )
-
-    st.plotly_chart(
-        fig,
-        use_container_width=True
     )
 
     # =====================================
