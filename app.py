@@ -3,12 +3,27 @@ import pandas as pd
 import plotly.express as px
 from io import BytesIO
 
+# =====================================
+# CONFIGURACION
+# =====================================
+
 st.set_page_config(
     page_title="Analizador Cuenta 14",
     layout="wide"
 )
 
-st.title("📊 Analizador Cuenta 14")
+st.title("📊 Analizador Inteligente - Cuenta 14")
+
+st.markdown("""
+Sistema automático para:
+
+- Entregas a rendir
+- Regularizaciones
+- Duplicados
+- Coincidencias Débito vs Crédito
+- Riesgos
+- Exportación automática
+""")
 
 # =====================================
 # FUNCIONES
@@ -17,9 +32,11 @@ st.title("📊 Analizador Cuenta 14")
 def cargar_archivo(archivo):
 
     if archivo.name.endswith(".csv"):
+
         df = pd.read_csv(archivo)
 
     else:
+
         df = pd.read_excel(archivo)
 
     return df
@@ -65,7 +82,7 @@ def convertir_numeros(df):
 
 
 # =====================================
-# REGULARIZACION
+# REGULARIZACION REAL
 # =====================================
 
 def detectar_regularizacion(df):
@@ -74,35 +91,57 @@ def detectar_regularizacion(df):
 
     df["Relacionado"] = ""
 
-    debitos = df[df["Débito"] > 0]
+    df["Espejo"] = False
 
-    creditos = df[df["Crédito"] > 0]
+    debitos = df[
+        df["Débito"] > 0
+    ]
+
+    creditos = df[
+        df["Crédito"] > 0
+    ]
 
     for i, deb in debitos.iterrows():
 
-        monto = deb["Débito"]
+        monto_debito = deb["Débito"]
 
         posibles = creditos[
-            creditos["Crédito"] == monto
+            creditos["Crédito"] == monto_debito
         ]
 
         if not posibles.empty:
 
-            credito_row = posibles.iloc[0]
+            for idx, cred in posibles.iterrows():
 
-            df.at[i, "Estado"] = "Regularizado"
+                # =================================
+                # MARCAR DEBITO
+                # =================================
 
-            df.at[i, "Relacionado"] = (
-                f"➡ Crédito: "
-                f"{credito_row['Crédito']} | "
-                f"{credito_row.get('Concepto', '')}"
-            )
+                df.at[i, "Estado"] = "Regularizado"
+
+                df.at[i, "Espejo"] = True
+
+                df.at[i, "Relacionado"] = (
+                    f"↔ Crédito {cred['Crédito']}"
+                )
+
+                # =================================
+                # MARCAR CREDITO
+                # =================================
+
+                df.at[idx, "Estado"] = "Regularizado"
+
+                df.at[idx, "Espejo"] = True
+
+                df.at[idx, "Relacionado"] = (
+                    f"↔ Débito {deb['Débito']}"
+                )
 
     return df
 
 
 # =====================================
-# DUPLICADOS
+# DUPLICADOS EXACTOS
 # =====================================
 
 def detectar_duplicados(df):
@@ -135,12 +174,15 @@ def detectar_duplicados(df):
 def riesgo(row):
 
     if row["Duplicado"]:
-        return "🔴 Alto"
+        return "🔴 Duplicado"
+
+    if row["Espejo"]:
+        return "🔵 Regularizado"
 
     if row["Estado"] == "Pendiente":
-        return "🟠 Medio"
+        return "🟡 Pendiente"
 
-    return "🟢 Bajo"
+    return "🟢 Normal"
 
 
 # =====================================
@@ -149,12 +191,15 @@ def riesgo(row):
 
 def colorear_filas(row):
 
+    # REGULARIZADO / ESPEJO
+    if row["Espejo"]:
+        return ["background-color: #99ccff"] * len(row)
+
+    # DUPLICADO
     if row["Duplicado"]:
         return ["background-color: #ff9999"] * len(row)
 
-    if row["Estado"] == "Regularizado":
-        return ["background-color: #99ccff"] * len(row)
-
+    # PENDIENTE
     if row["Estado"] == "Pendiente":
         return ["background-color: #fff3b0"] * len(row)
 
@@ -162,7 +207,7 @@ def colorear_filas(row):
 
 
 # =====================================
-# CARGA ARCHIVO
+# CARGAR ARCHIVO
 # =====================================
 
 archivo = st.file_uploader(
@@ -194,14 +239,10 @@ if archivo:
         )
 
     # =====================================
-    # REGULARIZACION
+    # ANALISIS
     # =====================================
 
     df = detectar_regularizacion(df)
-
-    # =====================================
-    # DUPLICADOS
-    # =====================================
 
     df = detectar_duplicados(df)
 
@@ -249,7 +290,9 @@ if archivo:
 
     duplicados = df["Duplicado"].sum()
 
-    col1, col2, col3, col4 = st.columns(4)
+    regularizados = df["Espejo"].sum()
+
+    col1, col2, col3, col4, col5 = st.columns(5)
 
     col1.metric(
         "💸 Débito",
@@ -267,8 +310,13 @@ if archivo:
     )
 
     col4.metric(
-        "🚨 Duplicados",
+        "🔴 Duplicados",
         duplicados
+    )
+
+    col5.metric(
+        "🔵 Regularizados",
+        regularizados
     )
 
     st.divider()
@@ -279,12 +327,6 @@ if archivo:
 
     st.sidebar.header("🔎 Filtros")
 
-    estado_select = st.sidebar.multiselect(
-        "Estado",
-        df["Estado"].unique(),
-        default=df["Estado"].unique()
-    )
-
     riesgo_select = st.sidebar.multiselect(
         "Riesgo",
         df["Riesgo"].unique(),
@@ -292,8 +334,7 @@ if archivo:
     )
 
     df_filtrado = df[
-        (df["Estado"].isin(estado_select)) &
-        (df["Riesgo"].isin(riesgo_select))
+        df["Riesgo"].isin(riesgo_select)
     ]
 
     # =====================================
@@ -315,6 +356,7 @@ if archivo:
         "Estado",
         "Relacionado",
         "Duplicado",
+        "Espejo",
         "Riesgo"
     ]
 
@@ -334,7 +376,7 @@ if archivo:
         })
         .apply(colorear_filas, axis=1),
         use_container_width=True,
-        height=600
+        height=700
     )
 
     # =====================================
@@ -345,17 +387,17 @@ if archivo:
 
     resumen = (
         df_filtrado
-        .groupby("Estado")[["Débito", "Crédito"]]
+        .groupby("Riesgo")[["Débito", "Crédito"]]
         .sum()
         .reset_index()
     )
 
     fig = px.bar(
         resumen,
-        x="Estado",
+        x="Riesgo",
         y=["Débito", "Crédito"],
         barmode="group",
-        title="Pendientes vs Regularizados"
+        title="Análisis de Riesgo"
     )
 
     st.plotly_chart(
@@ -367,7 +409,7 @@ if archivo:
     # DUPLICADOS
     # =====================================
 
-    st.subheader("🚨 Posibles Duplicados")
+    st.subheader("🔴 Posibles Duplicados")
 
     dup_df = df_filtrado[
         df_filtrado["Duplicado"]
@@ -378,9 +420,7 @@ if archivo:
         st.dataframe(
             dup_df.style.format({
                 "Débito": "{:,.2f}",
-                "Crédito": "{:,.2f}",
-                "Saldo": "{:,.2f}",
-                "T/C": "{:,.3f}"
+                "Crédito": "{:,.2f}"
             }),
             use_container_width=True
         )
