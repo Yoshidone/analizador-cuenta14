@@ -83,6 +83,7 @@ def convertir_numeros(df):
 # =====================================
 # REGULARIZACION REAL
 # SIN REPETIR CREDITOS
+# VALIDANDO NOMBRES
 # =====================================
 
 def detectar_regularizacion(df):
@@ -105,10 +106,42 @@ def detectar_regularizacion(df):
 
         monto_debito = deb["Débito"]
 
+        nombre_debito = str(
+            deb.get("Concepto", "")
+        ).upper().split()
+
         posibles = creditos[
-            (creditos["Crédito"] == monto_debito)
+
+            (
+                creditos["Crédito"] == monto_debito
+            )
+
             &
-            (~creditos.index.isin(creditos_usados))
+
+            (
+                creditos["Concepto"]
+                .astype(str)
+                .str.upper()
+                .apply(
+
+                    lambda x:
+
+                    any(
+                        palabra in x.split()
+                        for palabra in nombre_debito[:2]
+                    )
+
+                )
+            )
+
+            &
+
+            (
+                ~creditos.index.isin(
+                    creditos_usados
+                )
+            )
+
         ]
 
         if not posibles.empty:
@@ -300,10 +333,42 @@ if archivo:
 
         monto = deb["Débito"]
 
+        nombre_debito = str(
+            deb.get("Concepto", "")
+        ).upper().split()
+
         posibles = creditos[
-            (creditos["Crédito"] == monto)
+
+            (
+                creditos["Crédito"] == monto
+            )
+
             &
-            (~creditos.index.isin(creditos_usados))
+
+            (
+                creditos["Concepto"]
+                .astype(str)
+                .str.upper()
+                .apply(
+
+                    lambda x:
+
+                    any(
+                        palabra in x.split()
+                        for palabra in nombre_debito[:2]
+                    )
+
+                )
+            )
+
+            &
+
+            (
+                ~creditos.index.isin(
+                    creditos_usados
+                )
+            )
+
         ]
 
         if not posibles.empty:
