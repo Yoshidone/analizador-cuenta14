@@ -82,8 +82,6 @@ def convertir_numeros(df):
 
 # =====================================
 # REGULARIZACION REAL
-# SIN REPETIR CREDITOS
-# VALIDANDO NOMBRES
 # =====================================
 
 def detectar_regularizacion(df):
@@ -106,9 +104,20 @@ def detectar_regularizacion(df):
 
         monto_debito = deb["Débito"]
 
-        nombre_debito = str(
+        # =================================
+        # VALIDAR NOMBRE
+        # =================================
+
+        texto_debito = str(
             deb.get("Concepto", "")
-        ).upper().split()
+        ).upper()
+
+        palabras_debito = texto_debito.split()
+
+        palabras_clave = [
+            p for p in palabras_debito
+            if len(p) > 3
+        ]
 
         posibles = creditos[
 
@@ -127,8 +136,8 @@ def detectar_regularizacion(df):
                     lambda x:
 
                     any(
-                        palabra in x.split()
-                        for palabra in nombre_debito[:2]
+                        palabra in x
+                        for palabra in palabras_clave
                     )
 
                 )
@@ -312,7 +321,7 @@ if archivo:
             )
 
     # =====================================
-    # ORDENAR REGULARIZADOS JUNTOS
+    # ORDENAR REGULARIZADOS
     # =====================================
 
     df["Grupo"] = ""
@@ -333,9 +342,16 @@ if archivo:
 
         monto = deb["Débito"]
 
-        nombre_debito = str(
+        texto_debito = str(
             deb.get("Concepto", "")
-        ).upper().split()
+        ).upper()
+
+        palabras_debito = texto_debito.split()
+
+        palabras_clave = [
+            p for p in palabras_debito
+            if len(p) > 3
+        ]
 
         posibles = creditos[
 
@@ -354,8 +370,8 @@ if archivo:
                     lambda x:
 
                     any(
-                        palabra in x.split()
-                        for palabra in nombre_debito[:2]
+                        palabra in x
+                        for palabra in palabras_clave
                     )
 
                 )
