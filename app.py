@@ -21,8 +21,16 @@ Sistema automático para:
 - Duplicados
 - Pendientes
 - Riesgos
+- Relación Manual
 - Exportación automática
 """)
+
+# =====================================
+# SESSION STATE
+# =====================================
+
+if "df_master" not in st.session_state:
+    st.session_state.df_master = None
 
 # =====================================
 # FUNCIONES
@@ -246,143 +254,137 @@ archivo = st.file_uploader(
 
 if archivo:
 
-    df = cargar_archivo(archivo)
-
-    df = limpiar_columnas(df)
-
-    df = convertir_numeros(df)
-
     # =====================================
-    # FECHAS
+    # CARGA SOLO UNA VEZ
     # =====================================
 
-    if "Fecha" in df.columns:
+    if st.session_state.df_master is None:
 
-        df["Fecha"] = pd.to_datetime(
-            df["Fecha"],
-            errors="coerce"
+        df = cargar_archivo(archivo)
+
+        df = limpiar_columnas(df)
+
+        df = convertir_numeros(df)
+
+        if "Fecha" in df.columns:
+
+            df["Fecha"] = pd.to_datetime(
+                df["Fecha"],
+                errors="coerce"
+            )
+
+        df = detectar_regularizacion(df)
+
+        df = detectar_duplicados(df)
+
+        df["Riesgo"] = df.apply(
+            riesgo,
+            axis=1
         )
 
-    # =====================================
-    # ANALISIS
-    # =====================================
-
-    df = detectar_regularizacion(df)
-
-    df = detectar_duplicados(df)
-
-    # =====================================
-    # RIESGO
-    # =====================================
-
-    df["Riesgo"] = df.apply(
-        riesgo,
-        axis=1
-    )
-
-    # =====================================
-    # FORMATO NUMEROS
-    # =====================================
-
-    columnas_formato = [
-        "Débito",
-        "Crédito",
-        "Saldo",
-        "T/C"
-    ]
-
-    for col in columnas_formato:
-
-        if col in df.columns:
-
-            df[col] = (
-                df[col]
-                .astype(float)
-                .round(2)
-            )
-
-    # =====================================
-    # ORDENAR REGULARIZADOS
-    # =====================================
-
-    df["Grupo"] = ""
-
-    contador = 1
-
-    debitos = df[
-        df["Débito"] > 0
-    ]
-
-    creditos = df[
-        df["Crédito"] > 0
-    ]
-
-    creditos_usados = []
-
-    for i, deb in debitos.iterrows():
-
-        monto = deb["Débito"]
-
-        texto_debito = str(
-            deb.get("Concepto", "")
-        ).upper()
-
-        palabras_debito = texto_debito.split()
-
-        palabras_clave = [
-            p for p in palabras_debito
-            if len(p) > 3
+        columnas_formato = [
+            "Débito",
+            "Crédito",
+            "Saldo",
+            "T/C"
         ]
 
-        posibles = creditos[
+        for col in columnas_formato:
 
-            (
-                creditos["Crédito"] == monto
-            )
+            if col in df.columns:
 
-            &
+                df[col] = (
+                    df[col]
+                    .astype(float)
+                    .round(2)
+                )
 
-            (
-                creditos["Concepto"]
-                .astype(str)
-                .str.upper()
-                .apply(
+        df["Grupo"] = ""
 
-                    lambda x:
+        contador = 1
 
-                    any(
-                        palabra in x
-                        for palabra in palabras_clave
+        debitos = df[
+            df["Débito"] > 0
+        ]
+
+        creditos = df[
+            df["Crédito"] > 0
+        ]
+
+        creditos_usados = []
+
+        for i, deb in debitos.iterrows():
+
+            monto = deb["Débito"]
+
+            texto_debito = str(
+                deb.get("Concepto", "")
+            ).upper()
+
+            palabras_debito = texto_debito.split()
+
+            palabras_clave = [
+                p for p in palabras_debito
+                if len(p) > 3
+            ]
+
+            posibles = creditos[
+
+                (
+                    creditos["Crédito"] == monto
+                )
+
+                &
+
+                (
+                    creditos["Concepto"]
+                    .astype(str)
+                    .str.upper()
+                    .apply(
+
+                        lambda x:
+
+                        any(
+                            palabra in x
+                            for palabra in palabras_clave
+                        )
+
                     )
-
                 )
-            )
 
-            &
+                &
 
-            (
-                ~creditos.index.isin(
-                    creditos_usados
+                (
+                    ~creditos.index.isin(
+                        creditos_usados
+                    )
                 )
-            )
 
-        ]
+            ]
 
-        if not posibles.empty:
+            if not posibles.empty:
 
-            cred = posibles.iloc[0]
+                cred = posibles.iloc[0]
 
-            idx = cred.name
+                idx = cred.name
 
-            grupo = f"GRUPO {contador}"
+                grupo = f"GRUPO {contador}"
 
-            df.at[i, "Grupo"] = grupo
+                df.at[i, "Grupo"] = grupo
 
-            df.at[idx, "Grupo"] = grupo
+                df.at[idx, "Grupo"] = grupo
 
-            creditos_usados.append(idx)
+                creditos_usados.append(idx)
 
-            contador += 1
+                contador += 1
+
+        st.session_state.df_master = df
+
+    # =====================================
+    # USAR SESSION
+    # =====================================
+
+    df = st.session_state.df_master
 
     # =====================================
     # ORDEN FINAL
@@ -582,34 +584,36 @@ if archivo:
 
     st.subheader("🛠 Relacionar Manualmente")
 
-    debitos_pendientes = df_filtrado[
-        (df_filtrado["Estado"] == "Pendiente")
-        & (df_filtrado["Débito"] > 0)
+    debitos_pendientes = df[
+        (df["Estado"] == "Pendiente")
+        & (df["Débito"] > 0)
     ]
 
-    creditos_pendientes = df_filtrado[
-        (df_filtrado["Estado"] == "Pendiente")
-        & (df_filtrado["Crédito"] > 0)
+    creditos_pendientes = df[
+        (df["Estado"] == "Pendiente")
+        & (df["Crédito"] > 0)
     ]
 
     if not debitos_pendientes.empty and not creditos_pendientes.empty:
 
         debito_sel = st.multiselect(
             "Seleccionar Débitos",
-            debitos_pendientes.index,
+            debitos_pendientes.index.tolist(),
             format_func=lambda x:
                 f"{df.loc[x,'Fecha']} | "
                 f"{df.loc[x,'Concepto']} | "
-                f"Débito: {df.loc[x,'Débito']:,.2f}"
+                f"Débito: {df.loc[x,'Débito']:,.2f}",
+            key="debito_manual"
         )
 
         credito_sel = st.multiselect(
             "Seleccionar Créditos",
-            creditos_pendientes.index,
+            creditos_pendientes.index.tolist(),
             format_func=lambda x:
                 f"{df.loc[x,'Fecha']} | "
                 f"{df.loc[x,'Concepto']} | "
-                f"Crédito: {df.loc[x,'Crédito']:,.2f}"
+                f"Crédito: {df.loc[x,'Crédito']:,.2f}",
+            key="credito_manual"
         )
 
         total_debitos_manual = (
@@ -629,12 +633,12 @@ if archivo:
 
         st.info(
             f"""
-            💸 Total Débitos: S/ {total_debitos_manual:,.2f}
+💸 Total Débitos: S/ {total_debitos_manual:,.2f}
 
-            💰 Total Créditos: S/ {total_creditos_manual:,.2f}
+💰 Total Créditos: S/ {total_creditos_manual:,.2f}
 
-            📌 Diferencia: S/ {diferencia_manual:,.2f}
-            """
+📌 Diferencia: S/ {diferencia_manual:,.2f}
+"""
         )
 
         if st.button("✅ Relacionar Manualmente"):
@@ -656,6 +660,8 @@ if archivo:
 
                 df.at[idx, "Grupo"] = grupo_manual
 
+                df.at[idx, "Riesgo"] = "🔵 Regularizado"
+
             # =====================================
             # CREDITOS
             # =====================================
@@ -668,9 +674,15 @@ if archivo:
 
                 df.at[idx, "Grupo"] = grupo_manual
 
+                df.at[idx, "Riesgo"] = "🔵 Regularizado"
+
+            st.session_state.df_master = df
+
             st.success(
                 f"✅ Grupo manual creado: {grupo_manual}"
             )
+
+            st.rerun()
 
     else:
 
@@ -689,7 +701,7 @@ if archivo:
         engine="openpyxl"
     ) as writer:
 
-        df_filtrado.to_excel(
+        df.to_excel(
             writer,
             index=False,
             sheet_name="Analisis"
