@@ -20,7 +20,7 @@ Sistema automático para:
 - Entregas a rendir
 - Regularizaciones
 - Duplicados
-- Coincidencias Débito vs Crédito
+- Pendientes
 - Riesgos
 - Exportación automática
 """)
@@ -82,7 +82,7 @@ def convertir_numeros(df):
 
 
 # =====================================
-# REGULARIZACION REAL
+# REGULARIZACION
 # =====================================
 
 def detectar_regularizacion(df):
@@ -141,7 +141,7 @@ def detectar_regularizacion(df):
 
 
 # =====================================
-# DUPLICADOS EXACTOS
+# DUPLICADOS
 # =====================================
 
 def detectar_duplicados(df):
@@ -191,7 +191,7 @@ def riesgo(row):
 
 def colorear_filas(row):
 
-    # REGULARIZADO / ESPEJO
+    # REGULARIZADO
     if row["Espejo"]:
         return ["background-color: #99ccff"] * len(row)
 
@@ -305,7 +305,7 @@ if archivo:
     )
 
     col3.metric(
-        "⚠️ Pendientes",
+        "🟡 Pendientes",
         f"S/ {pendientes:,.2f}"
     )
 
@@ -432,6 +432,34 @@ if archivo:
         )
 
     # =====================================
+    # PENDIENTES
+    # =====================================
+
+    st.subheader("🟡 Movimientos Pendientes")
+
+    pendientes_df = df_filtrado[
+        df_filtrado["Estado"] == "Pendiente"
+    ]
+
+    if not pendientes_df.empty:
+
+        st.dataframe(
+            pendientes_df.style.format({
+                "Débito": "{:,.2f}",
+                "Crédito": "{:,.2f}",
+                "Saldo": "{:,.2f}",
+                "T/C": "{:,.3f}"
+            }),
+            use_container_width=True
+        )
+
+    else:
+
+        st.success(
+            "✅ No existen movimientos pendientes"
+        )
+
+    # =====================================
     # EXPORTAR
     # =====================================
 
@@ -452,6 +480,12 @@ if archivo:
             writer,
             index=False,
             sheet_name="Duplicados"
+        )
+
+        pendientes_df.to_excel(
+            writer,
+            index=False,
+            sheet_name="Pendientes"
         )
 
     output.seek(0)
