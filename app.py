@@ -3,6 +3,10 @@ import pandas as pd
 import plotly.express as px
 from io import BytesIO
 
+# =====================================
+# CONFIGURACION
+# =====================================
+
 st.set_page_config(
     page_title="Analizador Cuenta 14",
     layout="wide"
@@ -11,12 +15,14 @@ st.set_page_config(
 st.title("📊 Analizador Inteligente - Cuenta 14")
 
 st.markdown("""
-Sistema de análisis automático para:
+Sistema automático para:
+
 - Entregas a rendir
 - Regularizaciones
 - Duplicados
-- Pendientes
+- Coincidencias Débito vs Crédito
 - Riesgos
+- Exportación automática
 """)
 
 # =====================================
@@ -26,9 +32,11 @@ Sistema de análisis automático para:
 def cargar_archivo(archivo):
 
     if archivo.name.endswith(".csv"):
+
         df = pd.read_csv(archivo)
 
     else:
+
         df = pd.read_excel(archivo)
 
     return df
@@ -73,6 +81,10 @@ def convertir_numeros(df):
     return df
 
 
+# =====================================
+# REGULARIZACION
+# =====================================
+
 def detectar_regularizacion(df):
 
     df["Estado"] = "Pendiente"
@@ -93,6 +105,10 @@ def detectar_regularizacion(df):
 
     return df
 
+
+# =====================================
+# DUPLICADOS
+# =====================================
 
 def detectar_duplicados(df):
 
@@ -117,6 +133,10 @@ def detectar_duplicados(df):
     return df
 
 
+# =====================================
+# RIESGO
+# =====================================
+
 def riesgo(row):
 
     if row["Duplicado"]:
@@ -129,13 +149,35 @@ def riesgo(row):
 
 
 # =====================================
-# CARGA
+# COLORES
+# =====================================
+
+def colorear_filas(row):
+
+    if row["Duplicado"]:
+        return ["background-color: #ff9999"] * len(row)
+
+    if row["Estado"] == "Regularizado":
+        return ["background-color: #99ccff"] * len(row)
+
+    if row["Estado"] == "Pendiente":
+        return ["background-color: #fff3b0"] * len(row)
+
+    return [""] * len(row)
+
+
+# =====================================
+# CARGA ARCHIVO
 # =====================================
 
 archivo = st.file_uploader(
     "📂 Cargar Excel Cuenta 14",
     type=["xlsx", "xls", "csv"]
 )
+
+# =====================================
+# PROCESO
+# =====================================
 
 if archivo:
 
@@ -146,7 +188,7 @@ if archivo:
     df = convertir_numeros(df)
 
     # =====================================
-    # FECHA
+    # FECHAS
     # =====================================
 
     if "Fecha" in df.columns:
@@ -176,6 +218,27 @@ if archivo:
         riesgo,
         axis=1
     )
+
+    # =====================================
+    # FORMATO NUMEROS
+    # =====================================
+
+    columnas_formato = [
+        "Débito",
+        "Crédito",
+        "Saldo",
+        "T/C"
+    ]
+
+    for col in columnas_formato:
+
+        if col in df.columns:
+
+            df[col] = (
+                df[col]
+                .astype(float)
+                .round(2)
+            )
 
     # =====================================
     # KPIS
@@ -239,24 +302,7 @@ if archivo:
     ]
 
     # =====================================
-    # COLORES
-    # =====================================
-
-    def colorear_filas(row):
-
-        if row["Duplicado"]:
-            return ["background-color: #ff9999"] * len(row)
-
-        if row["Estado"] == "Regularizado":
-            return ["background-color: #99ccff"] * len(row)
-
-        if row["Estado"] == "Pendiente":
-            return ["background-color: #fff3b0"] * len(row)
-
-        return [""] * len(row)
-
-    # =====================================
-    # TABLA
+    # TABLA PRINCIPAL
     # =====================================
 
     st.subheader("📄 Análisis Inteligente")
@@ -264,13 +310,19 @@ if archivo:
     st.dataframe(
         df_filtrado
         .style
+        .format({
+            "Débito": "{:,.2f}",
+            "Crédito": "{:,.2f}",
+            "Saldo": "{:,.2f}",
+            "T/C": "{:,.3f}"
+        })
         .apply(colorear_filas, axis=1),
         use_container_width=True,
         height=600
     )
 
     # =====================================
-    # GRAFICO
+    # DASHBOARD
     # =====================================
 
     st.subheader("📈 Dashboard")
@@ -296,19 +348,92 @@ if archivo:
     )
 
     # =====================================
-    # DUPLICADOS
+    # DUPLICADOS Y COINCIDENCIAS
     # =====================================
 
-    st.subheader("🚨 Posibles Duplicados")
+    st.subheader("🚨 Posibles Duplicados y Coincidencias")
 
+    # DUPLICADOS EXACTOS
     dup_df = df_filtrado[
         df_filtrado["Duplicado"]
+    ].copy()
+
+    # COINCIDENCIAS
+    coincidencias = []
+
+    debitos = df_filtrado[
+        df_filtrado["Débito"] > 0
     ]
 
+    creditos = df_filtrado[
+        df_filtrado["Crédito"] > 0
+    ]
+
+    for _, deb in debitos.iterrows():
+
+        monto_debito = deb["Débito"]
+
+        posibles = creditos[
+            creditos["Crédito"] == monto_debito
+        ]
+
+        if not posibles.empty:
+
+            for _, cred in posibles.iterrows():
+
+                coincidencias.append({
+
+                    "Monto Coincide": monto_debito,
+
+                    "Fecha Débito": deb.get("Fecha"),
+
+                    "Fecha Crédito": cred.get("Fecha"),
+
+                    "Concepto Débito": deb.get("Concepto"),
+
+                    "Concepto Crédito": cred.get("Concepto"),
+
+                    "Estado": "Posible Regularización"
+                })
+
+    coincidencias_df = pd.DataFrame(coincidencias)
+
+    # =====================================
+    # MOSTRAR DUPLICADOS
+    # =====================================
+
+    st.markdown("### 🔴 Duplicados Exactos")
+
     st.dataframe(
-        dup_df,
+        dup_df.style.format({
+            "Débito": "{:,.2f}",
+            "Crédito": "{:,.2f}",
+            "Saldo": "{:,.2f}",
+            "T/C": "{:,.3f}"
+        }),
         use_container_width=True
     )
+
+    # =====================================
+    # MOSTRAR COINCIDENCIAS
+    # =====================================
+
+    st.markdown("### 🔵 Coincidencias Débito vs Crédito")
+
+    if not coincidencias_df.empty:
+
+        st.dataframe(
+            coincidencias_df.style.format({
+                "Monto Coincide": "{:,.2f}"
+            }),
+            use_container_width=True
+        )
+
+    else:
+
+        st.success(
+            "✅ No se encontraron coincidencias"
+        )
 
     # =====================================
     # EXPORTAR
@@ -331,6 +456,12 @@ if archivo:
             writer,
             index=False,
             sheet_name="Duplicados"
+        )
+
+        coincidencias_df.to_excel(
+            writer,
+            index=False,
+            sheet_name="Coincidencias"
         )
 
     output.seek(0)
