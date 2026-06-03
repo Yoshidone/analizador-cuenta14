@@ -64,6 +64,35 @@ def convertir_numeros(df):
 
 
 # ============================================================
+# PALABRAS GENÉRICAS (no sirven para identificar nombres)
+# ============================================================
+
+PALABRAS_IGNORAR = {
+    "MOVILIDAD", "TRABAJO", "GASTO", "GASTOS", "REEMBOLSO",
+    "REEMBOLSOS", "CUENTA", "PAGO", "ABONO", "CARGO", "BANCO",
+    "NONE", "TRAB", "REEM", "REND", "RENDIR", "EXTORNA",
+    "EXTORNO", "PROVISION", "PROV", "ENTREGAS", "ENTREGA",
+    "PARA", "DESDE", "HASTA", "SEGUN", "FECHA", "DIAS",
+    "DIA", "COBRO", "COBROS", "TRANS", "TRANSF", "DEPOSITO",
+    "DEPOSITOS", "EFECTIVO", "CHEQUE", "NOTA", "NOTAS",
+    "DEBE", "HABER", "SALDO", "MONTO", "IMPORTE"
+}
+
+
+def extraer_palabras_clave(concepto):
+    """
+    Extrae palabras del concepto que sirvan como identificadores
+    únicos (nombres propios), descartando palabras genéricas.
+    Solo considera palabras de más de 4 caracteres.
+    """
+    palabras = str(concepto).upper().split()
+    return [
+        p for p in palabras
+        if len(p) > 4 and p not in PALABRAS_IGNORAR
+    ]
+
+
+# ============================================================
 # FUNCIONES DE ANÁLISIS
 # ============================================================
 
@@ -71,6 +100,8 @@ def detectar_regularizacion(df):
     """
     Marca como 'Regularizado' los pares débito-crédito
     que coinciden por monto y palabras clave en Concepto.
+    Solo vincula si comparten al menos una palabra clave
+    no genérica (nombre propio del concepto).
     """
     df["Estado"] = "Pendiente"
     df["Espejo"] = False
@@ -82,10 +113,11 @@ def detectar_regularizacion(df):
     for i, deb in debitos.iterrows():
 
         monto = deb["Débito"]
-        palabras_clave = [
-            p for p in str(deb.get("Concepto", "")).upper().split()
-            if len(p) > 3
-        ]
+        palabras_clave = extraer_palabras_clave(deb.get("Concepto", ""))
+
+        # Sin palabras clave identificadoras, no se puede vincular con seguridad
+        if not palabras_clave:
+            continue
 
         posibles = creditos[
             (creditos["Crédito"] == monto)
@@ -121,6 +153,7 @@ def asignar_grupos(df):
     """
     Agrupa pares regularizados automáticamente bajo un mismo
     código 'GRUPO N' para facilitar la trazabilidad.
+    Usa las mismas palabras clave no genéricas que la regularización.
     """
     df["Grupo"] = ""
     contador = 1
@@ -132,10 +165,11 @@ def asignar_grupos(df):
     for i, deb in debitos.iterrows():
 
         monto = deb["Débito"]
-        palabras_clave = [
-            p for p in str(deb.get("Concepto", "")).upper().split()
-            if len(p) > 3
-        ]
+        palabras_clave = extraer_palabras_clave(deb.get("Concepto", ""))
+
+        # Sin palabras clave identificadoras, no se agrupa
+        if not palabras_clave:
+            continue
 
         posibles = creditos[
             (creditos["Crédito"] == monto)
